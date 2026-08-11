@@ -55,7 +55,7 @@ export { io }
 
 // ── Middleware global ─────────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: false }))
-app.options('*', cors(corsOptions))  // Manejar preflight OPTIONS en todas las rutas
+app.options('/(.*)', cors(corsOptions))  // Manejar preflight OPTIONS en todas las rutas (Express 5 compatible)
 app.use(cors(corsOptions))
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
