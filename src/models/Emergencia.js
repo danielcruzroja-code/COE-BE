@@ -78,10 +78,90 @@ const emergenciaSchema = new mongoose.Schema(
     // Timestamps de negocio
     tiempoReporte: { type: Date, default: Date.now },
     tiempoAsignacion: { type: Date, default: null },
-    // Registrado cuando la unidad en campo presiona "En Escena"
-    // TPR real = tiempoEscena - tiempoReporte
+    tiempoAceptacion: { type: Date, default: null },
     tiempoEscena: { type: Date, default: null },
     tiempoCierre: { type: Date, default: null },
+    // Reporte detallado de la unidad en campo (FO-DO-03)
+    reporteCampo: {
+      // 1. Llegada y Evaluación
+      oficialCargo: { type: String, default: '' },
+      descripcionLlegada: { type: String, default: '' },
+      entrevistado: {
+        nombre: { type: String, default: '' },
+        tipo: { type: String, default: '' }, // Propietario, testigo, etc.
+        refiere: { type: String, default: '' },
+      },
+      
+      // 2. Plan de Acción y SCI
+      planAccion: { type: String, default: '' },
+      objetivos: { type: String, default: '' },
+      estrategias: { type: String, default: '' },
+      tacticas: { type: String, default: '' },
+      mando: {
+        cmdteIncidente: { type: String, default: '' },
+        seguridad: { type: String, default: '' },
+        operaciones: { type: String, default: '' },
+        planificacion: { type: String, default: '' },
+        logistica: { type: String, default: '' },
+      },
+      recursosNecesarios: { type: String, default: '' },
+      mensajeSeguridad: { type: String, default: '' },
+
+      // 3. Causas y Daños
+      posiblesCausas: { type: String, default: '' },
+      danosVisibles: { type: String, default: '' },
+      perdidasEvitadas: { type: Boolean, default: false },
+
+      // 4. Víctimas
+      victimasTotal: { type: Number, default: 0 },
+      lesionados: { type: Number, default: 0 }, // Compatibilidad hacia atrás
+      lesionadosDetalle: {
+        ilesos: { type: Number, default: 0 },
+        leves: { type: Number, default: 0 }, // Verde
+        regulares: { type: Number, default: 0 }, // Amarillo
+        graves: { type: Number, default: 0 }, // Rojo / Peligra vida
+        prensados: { type: Number, default: 0 },
+      },
+      fallecidos: { type: Number, default: 0 },
+      rescatados: { type: Number, default: 0 },
+      observacionesVictimas: { type: String, default: '' },
+      trasladadosPor: { type: String, default: '' },
+
+      // 5. Cierre y Entrega
+      dependenciasPresentes: [
+        {
+          nombre: { type: String, default: '' }, // Ej. Comisaria, Cruz Verde
+          unidad: { type: String, default: '' },
+          aCargo: { type: String, default: '' },
+        }
+      ],
+      primerRespondiente: { type: String, default: '' },
+      primerInterviniente: { type: String, default: '' },
+      personalAsistente: { type: String, default: '' },
+      consumoTotal: { type: String, default: '' },
+      aCargoAlRetiro: { type: String, default: '' },
+      bienesEntregadosA: { type: String, default: '' },
+      observacionesGenerales: { type: String, default: '' },
+
+      // 6. Específicos por Tipo de Incidente
+      // Aquí se guarda todo lo dinámico: Fugas (sustancia, contenedor, porcentaje), Incendios (material, dictamen), etc.
+      detallesEspecificos: { type: mongoose.Schema.Types.Mixed, default: {} },
+      
+      vehiculosInvolucrados: [
+        {
+          tipo: { type: String, default: '' },
+          marca: { type: String, default: '' },
+          modelo: { type: String, default: '' },
+          placas: { type: String, default: '' },
+          color: { type: String, default: '' },
+          conductor: { type: String, default: '' }, // Nombre del conductor
+          impactoCon: { type: String, default: '' } // Con qué chocó
+        },
+      ],
+
+      // Imágenes y multimedia
+      imagenEscenaUrl: { type: String, default: '' },
+    },
     // Telegram: si ya se envió el mensaje de despacho
     telegramEnviado: { type: Boolean, default: false },
   },

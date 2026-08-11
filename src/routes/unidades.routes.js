@@ -30,7 +30,7 @@ router.post('/', soloRoles('admin'), crear)
 // PUT    /api/unidades/:id — solo admin
 router.put('/:id', soloRoles('admin'), actualizar)
 
-// PATCH  /api/unidades/:id/estado — campo u operador
+// PATCH  /api/unidades/:id/estado — campo, operador o admin
 router.patch('/:id/estado', soloRoles('operador', 'admin', 'campo'), actualizarEstado)
 
 // DELETE /api/unidades/:id — solo admin

@@ -1,6 +1,6 @@
 import Emergencia from '../models/Emergencia.js'
 import Unidad from '../models/Unidad.js'
-import { enviarDespacho, enviarActualizacionTelegram } from '../services/telegram.service.js'
+import { enviarNuevoIncidente, enviarDespacho, enviarActualizacionTelegram } from '../services/telegram.service.js'
 
 // ── GET /api/emergencias ──────────────────────────────────────────────────────
 // Query params: estado, prioridad, desde, hasta, pagina, limite
@@ -131,7 +131,13 @@ export const crear = async (req, res) => {
     })
 
     // Popular para devolver datos completos al frontend
-    await emergencia.populate('operadorId', 'nombre')
+    await emergencia.populate([
+      { path: 'operadorId', select: 'nombre' },
+      { path: 'catalogoIncidente', select: 'nombre' }
+    ])
+
+    // Disparar mensaje inicial de creación a Telegram
+    enviarNuevoIncidente(emergencia).catch(console.error)
 
     // Emitir evento Socket.io para que el mapa se actualice en tiempo real
     if (req.io) {
@@ -229,7 +235,7 @@ export const asignarUnidad = async (req, res) => {
     ])
 
     // Disparar Telegram en segundo plano
-    enviarDespacho(emergencia, unidad)
+    enviarDespacho(emergencia, unidad, req.usuario?.nombre).catch(console.error)
 
     if (req.io) {
       req.io.emit('emergencia:actualizada', emergencia)
@@ -287,7 +293,7 @@ export const cambiarEstado = async (req, res) => {
 
     // Disparar mensaje a Telegram con la actualización de estado de la emergencia
     if (emergencia.unidadAsignada) {
-      enviarActualizacionTelegram(emergencia, emergencia.unidadAsignada).catch(console.error)
+      enviarActualizacionTelegram(emergencia, emergencia.unidadAsignada, null, req.usuario?.nombre).catch(console.error)
     }
 
     if (req.io) {
@@ -298,6 +304,102 @@ export const cambiarEstado = async (req, res) => {
   } catch (error) {
     console.error('Error al cambiar estado:', error)
     res.status(500).json({ mensaje: 'Error al cambiar estado' })
+  }
+}
+
+// ── PATCH /api/emergencias/:id/aceptar ─────────────────────────────────────────
+// Unidad en campo acepta el servicio: registra tiempoAceptacion y cambia estado a en_atencion
+export const aceptarEmergencia = async (req, res) => {
+  try {
+    const emergencia = await Emergencia.findById(req.params.id)
+    if (!emergencia) return res.status(404).json({ mensaje: 'Emergencia no encontrada' })
+
+    const ahora = new Date()
+    if (!emergencia.tiempoAceptacion) {
+      emergencia.tiempoAceptacion = ahora
+    }
+    if (emergencia.estado === 'nuevo' || emergencia.estado === 'asignado') {
+      emergencia.estado = 'en_atencion'
+    }
+
+    if (emergencia.unidadAsignada) {
+      await Unidad.findByIdAndUpdate(emergencia.unidadAsignada, { estado: 'en_camino' })
+      if (req.io) {
+        req.io.emit('unidad:estado', { unidadId: emergencia.unidadAsignada.toString(), estado: 'en_camino' })
+      }
+    }
+
+    await emergencia.save()
+    await emergencia.populate([
+      { path: 'unidadAsignada', select: 'nombre tipo estado responsable' },
+      { path: 'catalogoIncidente', select: 'nombre' },
+      { path: 'dependenciasApoyo', select: 'nombreCorto' }
+    ])
+
+    if (req.io) {
+      req.io.emit('emergencia:actualizada', emergencia)
+    }
+
+    if (emergencia.unidadAsignada) {
+      enviarActualizacionTelegram(emergencia, emergencia.unidadAsignada, null, req.usuario?.nombre, 'CAMPO').catch(console.error)
+    }
+
+    res.json(emergencia)
+  } catch (error) {
+    console.error('Error al aceptar emergencia:', error)
+    res.status(500).json({ mensaje: 'Error al aceptar emergencia' })
+  }
+}
+
+// Guardar el formulario dinámico de campo (FO-DO-03)
+export const guardarReporteCampo = async (req, res) => {
+  try {
+    const { finalizar, ...datosReporte } = req.body
+
+    const emergencia = await Emergencia.findById(req.params.id)
+    if (!emergencia) return res.status(404).json({ mensaje: 'Emergencia no encontrada' })
+
+    const ahora = new Date()
+    if (!emergencia.tiempoEscena) {
+      emergencia.tiempoEscena = ahora
+    }
+
+    // Sobreescribir o combinar los campos del reporte de campo
+    emergencia.reporteCampo = {
+      ...(emergencia.reporteCampo?.toObject ? emergencia.reporteCampo.toObject() : emergencia.reporteCampo || {}),
+      ...datosReporte
+    }
+
+    if (finalizar) {
+      emergencia.estado = 'cerrado'
+      emergencia.tiempoCierre = ahora
+      if (emergencia.unidadAsignada) {
+        await Unidad.findByIdAndUpdate(emergencia.unidadAsignada, { estado: 'disponible' })
+        if (req.io) {
+          req.io.emit('unidad:estado', { unidadId: emergencia.unidadAsignada.toString(), estado: 'disponible' })
+        }
+      }
+    }
+
+    await emergencia.save()
+    await emergencia.populate([
+      { path: 'unidadAsignada', select: 'nombre tipo estado responsable' },
+      { path: 'catalogoIncidente', select: 'nombre' },
+      { path: 'dependenciasApoyo', select: 'nombreCorto' }
+    ])
+
+    if (finalizar && emergencia.unidadAsignada) {
+      enviarActualizacionTelegram(emergencia, emergencia.unidadAsignada, null, req.usuario?.nombre, 'CAMPO').catch(console.error)
+    }
+
+    if (req.io) {
+      req.io.emit('emergencia:actualizada', emergencia)
+    }
+
+    res.json(emergencia)
+  } catch (error) {
+    console.error('Error al guardar reporte de campo:', error)
+    res.status(500).json({ mensaje: 'Error al guardar reporte de campo' })
   }
 }
 
