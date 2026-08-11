@@ -19,11 +19,34 @@ await conectarDB()
 const app = express()
 const httpServer = createServer(app)
 
+// ── Orígenes permitidos (CORS) ────────────────────────────────────────────────
+// Soporta múltiples orígenes separados por coma en CLIENT_URL
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map(o => o.trim())
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Permitir requests sin origin (ej. mobile apps, Postman, curl)
+    if (!origin) return callback(null, true)
+    if (allowedOrigins.includes(origin)) return callback(null, true)
+    // En producción, ser permisivo con subdominios de railway.app
+    if (process.env.NODE_ENV === 'production' && origin.endsWith('.railway.app')) {
+      return callback(null, true)
+    }
+    callback(new Error(`CORS bloqueado para: ${origin}`))
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}
+
 // ── Socket.io ─────────────────────────────────────────────────────────────────
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 })
 
@@ -31,13 +54,9 @@ const io = new Server(httpServer, {
 export { io }
 
 // ── Middleware global ─────────────────────────────────────────────────────────
-app.use(helmet())
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true,
-  })
-)
+app.use(helmet({ crossOriginResourcePolicy: false }))
+app.options('*', cors(corsOptions))  // Manejar preflight OPTIONS en todas las rutas
+app.use(cors(corsOptions))
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
